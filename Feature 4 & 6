@@ -1,0 +1,299 @@
+.MODEL SMALL
+ 
+.STACK 100H
+
+.DATA
+
+;---------------------------------menu data---------------------------------
+CLEAR DB 25 DUP(13,10),"$"
+MENU DB 13,10, "===MENU===",13,10
+     DB "1. Check Balance" ,13,10
+     DB "2. Take loan" ,13,10
+     DB "3. Transfer Money" ,13,10
+     DB "4. Mobile Recharge" ,13,10 
+     DB "5. Transaction History" ,13,10 
+     DB "6. Exit" ,13,10  
+     DB "Select an option: $" 
+
+PRESSED DW 0
+PRESS_KEY DB 13,10, "Press "Enter" to return to menu $"
+INVALID DB 13,10, "Invalid option! Try again. $"    
+
+HDR_BALANCE DB 13,10,"========== CHECK BALANCE ==========",13,10,"$"
+HDR_LOAN DB 13,10,"========== TAKE LOAN ==========",13,10,"$"
+HDR_TRANSFER DB 13,10,"========== TRANSFER MONEY ==========",13,10,"$"
+HDR_RECHARGE DB 13,10,"========== MOBILE RECHARGE ==========",13,10,"$"
+HDR_HISTORY DB 13,10,"========== TRANSACTION HISTORY ==========",13,10,"$"
+
+STUB_BALANCE DB 13,10,"[Balance feature goes here]$"
+STUB_LOAN    DB 13,10,"[Loan feature goes here]$"
+STUB_TRANSFER DB 13,10,"[Transfer feature goes here]$"
+STUB_RECHARGE DB 13,10,"[Airtime feature goes here]$"
+STUB_HISTORY DB 13,10,"[History feature goes here]$"  
+
+;-----------------------------micro loan feature data--------------------------------------------
+M1 DB "Enter the amount: $" 
+M2 DB 13,10, "Interest rate(%): $"
+M3 DB 13,10, "Interest applied  : $"
+M4 DB 13,10, "Total payback: $"
+M5 DB 13,10, "Current balance: $"
+
+REQUESTED DW 0
+INTEREST DW 0
+RATE EQU 5    
+
+PAYBACK DW 0
+BALANCE DW 5000
+     
+
+
+.CODE
+MAIN PROC
+
+; initialize DS
+
+MOV AX,@DATA
+MOV DS,AX
+ 
+MENU_START: 
+
+  
+   LEA DX, CLEAR
+   MOV AH,09
+   INT 21H
+   
+   LEA DX, MENU
+   MOV AH,09
+   INT 21H
+
+   CALL READ_NUM
+   MOV PRESSED, AX
+   
+
+   MOV AX, PRESSED
+   CMP AX, 1
+   JE CHECK_BALANCE 
+   
+   MOV AX, PRESSED
+   CMP AX, 2
+   JE TAKE_LOAN
+
+   MOV AX, PRESSED
+   CMP AX, 3
+   JE TRANSFER_MONEY
+
+   MOV AX, PRESSED
+   CMP AX, 4
+   JE RECHARGE 
+
+   MOV AX, PRESSED
+   CMP AX, 5
+   JE HISTORY
+ 
+   MOV AX, PRESSED
+   CMP AX, 6
+   JE EXIT 
+   
+   LEA DX, INVALID
+   MOV AH,09
+   INT 21H
+   JMP STARTING
+   
+CHECK_BALANCE: 
+   LEA DX, CLEAR
+   MOV AH,09
+   INT 21H
+   LEA DX, HDR_BALANCE
+   MOV AH,09
+   INT 21H
+   
+   LEA DX, STUB_BALANCE
+   MOV AH,09
+   INT 21H 
+
+   JMP STARTING
+                 
+RECHARGE:  
+   LEA DX, CLEAR
+   MOV AH,09
+   INT 21H
+   LEA DX, HDR_RECHARGE
+   MOV AH,09
+   INT 21H
+   
+   LEA DX, STUB_RECHARGE
+   MOV AH,09
+   INT 21H 
+   JMP STARTING
+   
+              
+TAKE_LOAN: 
+
+    LEA DX, HDR_LOAN
+    MOV AH,09
+    INT 21H  
+    
+    LEA DX, M1
+    MOV AH,09
+    INT 21H
+    
+    CALL READ_NUM
+    
+    MOV REQUESTED, AX   
+
+;interest calculation    
+    MOV AX, REQUESTED
+    MOV BX, RATE
+    MUL BX
+
+    MOV BX, 100   
+    mov DX,0
+    DIV BX  
+    MOV INTEREST, AX
+
+;payback calculation    
+    MOV AX, REQUESTED
+    ADD AX, INTEREST
+    MOV PAYBACK, AX
+
+;final balance calculation    
+    MOV AX, BALANCE
+    ADD AX, REQUESTED
+    MOV BALANCE, AX 
+    
+
+; INTEREST RATE   
+    LEA DX, M2
+    MOV AH,09
+    INT 21H 
+    MOV AX, RATE
+    CALL PRINT_NUM
+    
+
+; INTEREST    
+    LEA DX, M3
+    MOV AH,09
+    INT 21H 
+    MOV AX, INTEREST
+    CALL PRINT_NUM  
+
+    
+;PAYBACK    
+    LEA DX, M4
+    MOV AH,09
+    INT 21H 
+    MOV AX, PAYBACK
+    CALL PRINT_NUM
+    
+;BALANCE
+    LEA DX, M5
+    MOV AH,09
+    INT 21H 
+    MOV AX, BALANCE
+    CALL PRINT_NUM
+   
+   JMP STARTING    
+   
+
+TRANSFER_MONEY: 
+   LEA DX, CLEAR
+   MOV AH,09
+   INT 21H
+   LEA DX, HDR_TRANSFER
+   MOV AH,09
+   INT 21H
+   
+   LEA DX, STUB_TRANSFER
+   MOV AH,09
+   INT 21H
+   JMP STARTING 
+   
+
+HISTORY:   
+   LEA DX, CLEAR
+   MOV AH,09
+   INT 21H
+   LEA DX, HDR_HISTORY
+   MOV AH,09
+   INT 21H
+   
+   LEA DX, STUB_HISTORY
+   MOV AH,09
+   INT 21H
+   JMP STARTING
+
+
+STARTING:
+   LEA DX, PRESS_KEY
+   MOV AH,09
+   INT 21H   
+   
+   MOV AH,1
+   INT 21H  
+   JMP MENU_START
+                   
+  
+EXIT:
+               
+  MOV AX,4C00H
+  INT 21H
+
+MAIN ENDP
+
+READ_NUM PROC
+     
+
+    MOV CX, 0
+    
+READ:
+   MOV AH, 1
+   INT 21H 
+   CMP AL, 13
+   JE DONE
+   SUB AL,30H
+   MOV AH,0
+   PUSH AX 
+   
+   MOV AX,CX 
+   MOV BX, 10
+   MUL BX
+   MOV CX, AX
+   
+   POP AX
+   ADD CX,AX
+   JMP READ
+   
+DONE:     
+   MOV AX, CX
+   
+    RET
+READ_NUM ENDP
+
+
+;PRINTING THE OUTPUT
+PRINT_NUM PROC 
+    MOV BX , 10
+    MOV CX , 0
+    
+PN_DIVIDE:
+    MOV DX, 0
+    DIV BX ; AX = AX /10 , DX = remainder
+    PUSH DX
+    INC CX
+    CMP AX, 0
+    JNZ PN_DIVIDE
+
+
+PN_PRINT:
+    POP DX
+    ADD DL, 30H
+    MOV AH , 2
+    INT 21H
+    LOOP PN_PRINT
+    RET
+PRINT_NUM ENDP
+
+
+
+    END MAIN
+
