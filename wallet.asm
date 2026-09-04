@@ -620,12 +620,13 @@ WAIT_TICKS:
     JB WAIT_TICKS
 
 FLUSH_KEY_BUFFER:
-    ; Drain any keyboard input buffer so keys pressed during freeze are ignored
-    MOV AH, 01H         ; Check if keystroke in buffer
-    INT 16H
-    JZ FREEZE_DONE      ; Buffer is empty
-    MOV AH, 00H         ; Remove key from buffer
-    INT 16H
+    ; Drain keyboard input buffer using DOS INT 21H so keys pressed during freeze are ignored
+    MOV AH, 0BH         ; Check STDIN status (AL=0FFh if key ready, 00h if empty)
+    INT 21H
+    CMP AL, 00H         ; Is buffer empty?
+    JE FREEZE_DONE      ; Yes -> buffer clear
+    MOV AH, 07H         ; No -> read & discard keystroke without echo
+    INT 21H
     JMP FLUSH_KEY_BUFFER
 
 FREEZE_DONE:
