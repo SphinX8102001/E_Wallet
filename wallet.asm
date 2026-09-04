@@ -57,8 +57,30 @@ RATE EQU 5
 
 PAYBACK DW 0
 BALANCE DW 5000
-     
 
+;-----------------------------Feature 3: Transfer & Mobile Recharge data-------------
+MSG_ENTER_PHONE   DB 13,10,"Enter Phone Number: $"
+MSG_ENTER_AMOUNT  DB 13,10,"Enter Amount: $"
+MSG_REJECT_BAL    DB 13,10,"[REJECTED] Insufficient balance!",13,10,"$"
+MSG_TRANSFER_DONE DB 13,10,"[SUCCESS] Transfer completed successfully!",13,10,"$"
+MSG_RECHARGE_DONE DB 13,10,"[SUCCESS] Recharge completed successfully!",13,10,"$"
+TEMP_AMOUNT       DW 0
+PHONE_BUF         DB 15 DUP('$')
+
+;-----------------------------Feature 5: Transaction History Log data---------------
+TX_COUNT          DB 0
+TX_TYPES          DB 5 DUP(0)
+TX_AMOUNTS        DW 5 DUP(0)
+
+MSG_NO_HISTORY    DB 13,10,"No recent transactions found.",13,10,"$"
+MSG_HIST_HEADER   DB 13,10,"#  Type             Amount",13,10
+                  DB "---------------------------------",13,10,"$"
+MSG_HIST_DOT      DB ". $"
+MSG_HIST_PIPE     DB "  $"
+MSG_HIST_BDT      DB " BDT",13,10,"$"
+MSG_TYPE_LOAN     DB "Micro-Loan       $"
+MSG_TYPE_TRANSFER DB "Transfer Money   $"
+MSG_TYPE_RECHARGE DB "Mobile Recharge  $"
 
 .CODE
 MAIN PROC
@@ -242,15 +264,56 @@ CHECK_BALANCE:
 
    JMP STARTING
                  
+;=============================================================================
+; FEATURE 3: MONEY TRANSFER AND MOBILE RECHARGE (MOBILE RECHARGE)
+;=============================================================================
 RECHARGE:  
 
    LEA DX, HDR_RECHARGE
    MOV AH,09
    INT 21H
    
-   LEA DX, STUB_RECHARGE
+   LEA DX, MSG_ENTER_PHONE
    MOV AH,09
-   INT 21H 
+   INT 21H
+   CALL READ_PHONE
+
+   LEA DX, MSG_ENTER_AMOUNT
+   MOV AH,09
+   INT 21H
+   CALL READ_NUM
+   MOV TEMP_AMOUNT, AX
+
+   MOV AX, TEMP_AMOUNT
+   CMP AX, BALANCE
+   JA RECHARGE_REJECT
+
+   MOV AX, BALANCE
+   SUB AX, TEMP_AMOUNT
+   MOV BALANCE, AX
+
+   MOV AL, 3
+   MOV BX, TEMP_AMOUNT
+   CALL LOG_TRANSACTION
+
+   LEA DX, MSG_RECHARGE_DONE
+   MOV AH,09
+   INT 21H
+
+   LEA DX, MSG_CURRENT_BAL
+   MOV AH,09
+   INT 21H
+   MOV AX, BALANCE
+   CALL PRINT_NUM
+   LEA DX, MSG_CURRENCY
+   MOV AH,09
+   INT 21H
+   JMP STARTING
+
+RECHARGE_REJECT:
+   LEA DX, MSG_REJECT_BAL
+   MOV AH,09
+   INT 21H
    JMP STARTING
    
               
@@ -289,6 +352,10 @@ TAKE_LOAN:
     MOV BALANCE, AX 
     
 
+    MOV AL, 1
+    MOV BX, REQUESTED
+    CALL LOG_TRANSACTION
+
 ; INTEREST RATE   
     LEA DX, M2
     MOV AH,09
@@ -322,27 +389,138 @@ TAKE_LOAN:
    JMP STARTING    
    
 
+;=============================================================================
+; FEATURE 3: MONEY TRANSFER AND MOBILE RECHARGE (TRANSFER MONEY)
+;=============================================================================
 TRANSFER_MONEY: 
 
    LEA DX, HDR_TRANSFER
    MOV AH,09
    INT 21H
    
-   LEA DX, STUB_TRANSFER
+   LEA DX, MSG_ENTER_PHONE
+   MOV AH,09
+   INT 21H
+   CALL READ_PHONE
+
+   LEA DX, MSG_ENTER_AMOUNT
+   MOV AH,09
+   INT 21H
+   CALL READ_NUM
+   MOV TEMP_AMOUNT, AX
+
+   MOV AX, TEMP_AMOUNT
+   CMP AX, BALANCE
+   JA TRANSFER_REJECT
+
+   MOV AX, BALANCE
+   SUB AX, TEMP_AMOUNT
+   MOV BALANCE, AX
+
+   MOV AL, 2
+   MOV BX, TEMP_AMOUNT
+   CALL LOG_TRANSACTION
+
+   LEA DX, MSG_TRANSFER_DONE
+   MOV AH,09
+   INT 21H
+
+   LEA DX, MSG_CURRENT_BAL
+   MOV AH,09
+   INT 21H
+   MOV AX, BALANCE
+   CALL PRINT_NUM
+   LEA DX, MSG_CURRENCY
+   MOV AH,09
+   INT 21H
+   JMP STARTING
+
+TRANSFER_REJECT:
+   LEA DX, MSG_REJECT_BAL
    MOV AH,09
    INT 21H
    JMP STARTING 
    
 
+;=============================================================================
+; FEATURE 5: TRANSACTION HISTORY LOG
+;=============================================================================
 HISTORY:   
 
    LEA DX, HDR_HISTORY
    MOV AH,09
    INT 21H
    
-   LEA DX, STUB_HISTORY
+   MOV AL, TX_COUNT
+   CMP AL, 0
+   JE HIST_EMPTY
+
+   LEA DX, MSG_HIST_HEADER
    MOV AH,09
    INT 21H
+
+   MOV SI, 0
+   MOV BH, 0
+   MOV BL, TX_COUNT
+
+HIST_LOOP:
+   CMP SI, BX
+   JGE HIST_DONE
+
+   MOV AX, SI
+   INC AX
+   CALL PRINT_NUM
+
+   LEA DX, MSG_HIST_DOT
+   MOV AH,09
+   INT 21H
+
+   MOV AL, TX_TYPES[SI]
+   CMP AL, 1
+   JE HIST_LOAN
+   CMP AL, 2
+   JE HIST_TRANSFER
+
+   LEA DX, MSG_TYPE_RECHARGE
+   MOV AH,09
+   INT 21H
+   JMP HIST_AMT
+
+HIST_LOAN:
+   LEA DX, MSG_TYPE_LOAN
+   MOV AH,09
+   INT 21H
+   JMP HIST_AMT
+
+HIST_TRANSFER:
+   LEA DX, MSG_TYPE_TRANSFER
+   MOV AH,09
+   INT 21H
+
+HIST_AMT:
+   LEA DX, MSG_HIST_PIPE
+   MOV AH,09
+   INT 21H
+
+   MOV AX, SI
+   SHL AX, 1
+   MOV DI, AX
+   MOV AX, TX_AMOUNTS[DI]
+   CALL PRINT_NUM
+
+   LEA DX, MSG_HIST_BDT
+   MOV AH,09
+   INT 21H
+
+   INC SI
+   JMP HIST_LOOP
+
+HIST_EMPTY:
+   LEA DX, MSG_NO_HISTORY
+   MOV AH,09
+   INT 21H
+
+HIST_DONE:
    JMP STARTING
 
 
@@ -457,5 +635,107 @@ FREEZE_DONE:
     POP AX
     RET
 FREEZE_SYSTEM ENDP
+
+;-----------------------------------------------------------------------------
+; READ_PHONE: Reads up to 11 digit characters into PHONE_BUF
+;-----------------------------------------------------------------------------
+READ_PHONE PROC
+    PUSH AX
+    PUSH CX
+    PUSH SI
+
+    LEA SI, PHONE_BUF
+    MOV CX, 11
+
+RP_LOOP:
+    MOV AH, 1
+    INT 21H
+    CMP AL, 13
+    JE RP_DONE
+    CMP AL, '0'
+    JB RP_LOOP
+    CMP AL, '9'
+    JA RP_LOOP
+    MOV [SI], AL
+    INC SI
+    LOOP RP_LOOP
+
+RP_DONE:
+    MOV BYTE PTR [SI], '$'
+
+    POP SI
+    POP CX
+    POP AX
+    RET
+READ_PHONE ENDP
+
+;-----------------------------------------------------------------------------
+; LOG_TRANSACTION: Appends or slides transaction entries into ring buffer
+; Input: AL = Type (1=Loan, 2=Transfer, 3=Recharge), BX = Amount
+;-----------------------------------------------------------------------------
+LOG_TRANSACTION PROC
+    PUSH AX
+    PUSH BX
+    PUSH CX
+    PUSH DX
+    PUSH SI
+    PUSH DI
+
+    MOV DH, AL             ; DH = transaction type
+    MOV CX, BX             ; CX = transaction amount
+
+    MOV AL, TX_COUNT
+    MOV AH, 0
+    CMP AX, 5
+    JB LT_APPEND
+
+    ; ---- Buffer full: shift entries 1..4 to 0..3 ----
+    MOV DI, 0
+
+LT_SHIFT_LOOP:
+    CMP DI, 4
+    JGE LT_WRITE_LAST
+
+    MOV SI, DI
+    INC SI                 ; SI = DI + 1
+
+    ; Move type: TX_TYPES[DI] = TX_TYPES[SI]
+    MOV AL, TX_TYPES[SI]
+    MOV TX_TYPES[DI], AL
+
+    ; Move amount: TX_AMOUNTS[DI*2] = TX_AMOUNTS[SI*2]
+    PUSH DI
+    PUSH SI
+    SHL SI, 1
+    SHL DI, 1
+    MOV DX, TX_AMOUNTS[SI]
+    MOV TX_AMOUNTS[DI], DX
+    POP SI
+    POP DI
+
+    INC DI
+    JMP LT_SHIFT_LOOP
+
+LT_WRITE_LAST:
+    MOV DI, 4
+    JMP LT_WRITE
+
+LT_APPEND:
+    MOV DI, AX             ; DI = current TX_COUNT (0..4)
+    INC TX_COUNT
+
+LT_WRITE:
+    MOV TX_TYPES[DI], DH
+    SHL DI, 1
+    MOV TX_AMOUNTS[DI], CX
+
+    POP DI
+    POP SI
+    POP DX
+    POP CX
+    POP BX
+    POP AX
+    RET
+LOG_TRANSACTION ENDP
 
     END MAIN
