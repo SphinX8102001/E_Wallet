@@ -59,6 +59,12 @@ RATE EQU 5
 PAYBACK DW 0
 BALANCE DW 5000
 
+
+DEBT DW 0
+MAX_DEBT EQU 15000
+MSG_DEBT_LIMIT DB 13,10,"[REJECTED] Debt limit reached. Pay down your existing loans before borrowing more.",13,10,"$"
+MSG_CURRENT_DEBT DB 13,10,"Current Debt: $"
+
 ;-----------------------------Feature 3: Transfer & Mobile Recharge data-------------
 MSG_ENTER_PHONE   DB 13,10,"Enter Phone Number: $"
 MSG_ENTER_AMOUNT  DB 13,10,"Enter Amount: $"
@@ -332,7 +338,14 @@ TAKE_LOAN:
     LEA DX, HDR_LOAN
     MOV AH,09
     INT 21H  
+
     
+    MOV AX, DEBT
+    CMP AX, MAX_DEBT
+    JL DEBT_OK
+    JMP DEBT_LIMIT 
+    
+DEBT_OK:
     LEA DX, M1
     MOV AH,09
     INT 21H  
@@ -341,6 +354,8 @@ TAKE_LOAN:
     
     MOV REQUESTED, AX   
 
+   CMP AX, 13000
+   JG TOO_BIG_LOAN  
 ;interest calculation    
     MOV AX, REQUESTED
     MOV BX, RATE
@@ -354,7 +369,11 @@ TAKE_LOAN:
 ;payback calculation    
     MOV AX, REQUESTED
     ADD AX, INTEREST
-    MOV PAYBACK, AX
+    MOV PAYBACK, AX 
+    
+    MOV AX, DEBT
+    ADD AX,PAYBACK
+    MOV DEBT, AX
 
 ;final balance calculation    
     MOV AX, BALANCE
@@ -395,9 +414,28 @@ TAKE_LOAN:
     INT 21H 
     MOV AX, BALANCE
     CALL PRINT_NUM
-   
+
+    CALL PRINT_NUM  
+    
+    LEA DX, MSG_CURRENT_DEBT
+    MOV AH,09
+    INT 21H
+    MOV AX, DEBT
+
+   JMP STARTING   
+
+TOO_BIG_LOAN:   
+   LEA DX, REJECT
+   MOV AH,09
+   INT 21H
    JMP STARTING    
    
+
+DEBT_LIMIT:
+    LEA DX, MSG_DEBT_LIMIT
+    MOV AH,09
+    INT 21H
+    JMP STARTING   
 
 ;=============================================================================
 ; FEATURE 3: MONEY TRANSFER AND MOBILE RECHARGE (TRANSFER MONEY)
@@ -552,9 +590,11 @@ STARTING:
    MOV AH,09
    INT 21H   
    
-   MOV AH,1
-   INT 21H  
-   JMP MENU_START
+    MOV AH,1 
+    INT 21H
+    CMP AL,13
+    JE MENU_START
+    JNE STARTING 
                    
   
 EXIT:
