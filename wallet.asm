@@ -58,16 +58,12 @@ RATE EQU 5
 
 PAYBACK DW 0
 BALANCE DW 5000
- 
-DEBT DW 0
-MAX_DEBT EQU 15000
-MSG_DEBT_LIMIT DB 13,10,"[REJECTED] Debt limit reached. Pay down your existing loans before borrowing more.",13,10,"$"
-MSG_CURRENT_DEBT DB 13,10,"Current Debt: $"
 
 ;-----------------------------Feature 3: Transfer & Mobile Recharge data-------------
 MSG_ENTER_PHONE   DB 13,10,"Enter Phone Number: $"
 MSG_ENTER_AMOUNT  DB 13,10,"Enter Amount: $"
 MSG_REJECT_BAL    DB 13,10,"[REJECTED] Insufficient balance!",13,10,"$"
+MSG_REJECT_ZERO   DB 13,10,"[REJECTED] Amount must be greater than 0!",13,10,"$"
 MSG_TRANSFER_DONE DB 13,10,"[SUCCESS] Transfer completed successfully!",13,10,"$"
 MSG_RECHARGE_DONE DB 13,10,"[SUCCESS] Recharge completed successfully!",13,10,"$"
 TEMP_AMOUNT       DW 0
@@ -291,6 +287,8 @@ RECHARGE:
    MOV TEMP_AMOUNT, AX
 
    MOV AX, TEMP_AMOUNT
+   CMP AX, 0
+   JE RECHARGE_REJECT_ZERO
    CMP AX, BALANCE
    JA RECHARGE_REJECT
 
@@ -316,6 +314,12 @@ RECHARGE:
    INT 21H
    JMP STARTING
 
+RECHARGE_REJECT_ZERO:
+   LEA DX, MSG_REJECT_ZERO
+   MOV AH,09
+   INT 21H
+   JMP STARTING
+
 RECHARGE_REJECT:
    LEA DX, MSG_REJECT_BAL
    MOV AH,09
@@ -329,24 +333,13 @@ TAKE_LOAN:
     MOV AH,09
     INT 21H  
     
-    
-    MOV AX, DEBT
-    CMP AX, MAX_DEBT
-    JL DEBT_OK
-    JMP DEBT_LIMIT 
-    
-DEBT_OK:
-
     LEA DX, M1
     MOV AH,09
     INT 21H  
     
     CALL READ_NUM
     
-    MOV REQUESTED, AX 
-    
-    CMP AX, 13000
-    JG TOO_BIG_LOAN  
+    MOV REQUESTED, AX   
 
 ;interest calculation    
     MOV AX, REQUESTED
@@ -354,17 +347,14 @@ DEBT_OK:
     MUL BX
 
     MOV BX, 100   
+    mov DX,0
     DIV BX  
     MOV INTEREST, AX
 
 ;payback calculation    
     MOV AX, REQUESTED
     ADD AX, INTEREST
-    MOV PAYBACK, AX 
-    
-    MOV AX, DEBT
-    ADD AX,PAYBACK
-    MOV DEBT, AX
+    MOV PAYBACK, AX
 
 ;final balance calculation    
     MOV AX, BALANCE
@@ -404,27 +394,11 @@ DEBT_OK:
     MOV AH,09
     INT 21H 
     MOV AX, BALANCE
-    CALL PRINT_NUM  
-    
-    LEA DX, MSG_CURRENT_DEBT
-    MOV AH,09
-    INT 21H
-    MOV AX, DEBT
     CALL PRINT_NUM
    
-   JMP STARTING
-       
-TOO_BIG_LOAN:   
-   LEA DX, REJECT
-   MOV AH,09
-   INT 21H
    JMP STARTING    
    
-DEBT_LIMIT:
-    LEA DX, MSG_DEBT_LIMIT
-    MOV AH,09
-    INT 21H
-    JMP STARTING
+
 ;=============================================================================
 ; FEATURE 3: MONEY TRANSFER AND MOBILE RECHARGE (TRANSFER MONEY)
 ;=============================================================================
@@ -446,6 +420,8 @@ TRANSFER_MONEY:
    MOV TEMP_AMOUNT, AX
 
    MOV AX, TEMP_AMOUNT
+   CMP AX, 0
+   JE TRANSFER_REJECT_ZERO
    CMP AX, BALANCE
    JA TRANSFER_REJECT
 
@@ -467,6 +443,12 @@ TRANSFER_MONEY:
    MOV AX, BALANCE
    CALL PRINT_NUM
    LEA DX, MSG_CURRENCY
+   MOV AH,09
+   INT 21H
+   JMP STARTING
+
+TRANSFER_REJECT_ZERO:
+   LEA DX, MSG_REJECT_ZERO
    MOV AH,09
    INT 21H
    JMP STARTING
@@ -496,11 +478,11 @@ HISTORY:
    INT 21H
 
    MOV SI, 0
-   MOV BH, 0
-   MOV BL, TX_COUNT
 
 HIST_LOOP:
-   CMP SI, BX
+   MOV AL, TX_COUNT
+   MOV AH, 0
+   CMP SI, AX
    JGE HIST_DONE
 
    MOV AX, SI
@@ -516,7 +498,12 @@ HIST_LOOP:
    JE HIST_LOAN
    CMP AL, 2
    JE HIST_TRANSFER
+   CMP AL, 3
+   JE HIST_RECHARGE
+   INC SI
+   JMP HIST_LOOP
 
+HIST_RECHARGE:
    LEA DX, MSG_TYPE_RECHARGE
    MOV AH,09
    INT 21H
@@ -564,12 +551,11 @@ STARTING:
    LEA DX, PRESS_KEY
    MOV AH,09
    INT 21H   
-       
-    MOV AH,1 
-    INT 21H
-    CMP AL,13
-    JE MENU_START
-    JNE STARTING 
+   
+   MOV AH,1
+   INT 21H  
+   JMP MENU_START
+                   
   
 EXIT:
                
@@ -610,6 +596,11 @@ READ_NUM ENDP
 
 ;PRINTING THE OUTPUT
 PRINT_NUM PROC 
+    PUSH AX
+    PUSH BX
+    PUSH CX
+    PUSH DX
+
     MOV BX , 10
     MOV CX , 0
     
@@ -628,6 +619,11 @@ PN_PRINT:
     MOV AH , 2
     INT 21H
     LOOP PN_PRINT
+
+    POP DX
+    POP CX
+    POP BX
+    POP AX
     RET
 PRINT_NUM ENDP
 
